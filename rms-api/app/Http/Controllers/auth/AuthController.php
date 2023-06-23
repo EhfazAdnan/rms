@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use App\Jobs\VerifyUserJobs;
 use Illuminate\Http\Request;
+use App\Jobs\PasswordResetJob;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
@@ -19,7 +21,7 @@ class AuthController extends Controller
      * @return void
      */
     public function __construct() {
-        $this->middleware('auth:api', ['except' => ['login', 'register','accountVerify']]);
+        $this->middleware('auth:api', ['except' => ['login', 'register','accountVerify','forgotPassword']]);
     }
     /**
      * Get a JWT via given credentials.
@@ -121,5 +123,28 @@ class AuthController extends Controller
             'expires_in' => JWTAuth::factory()->getTTL() * 60,
             'user' => auth()->user()
         ]);
+    }
+
+    public function forgotPassword(Request $request){
+       try {
+        $user = User::where('email', $request->email)->first();
+        if($user){
+          $token = Str::random(15);
+          $details = ['name'=>$user->name, 'token'=>$token, 'email'=>$user->email, 'hashEmail'=>Crypt::encryptString($user->email)];
+          if(dispatch(new PasswordResetJob($details))){
+            //insert password reset request
+            DB::table('password_resets')->insert([
+              'email'=>$user->email,
+              'token'=>$token,
+              'created_at'=>now()
+            ]);
+            return response()->json(['status'=>true, 'message'=>'Password reset link has been sent to your email']);
+          }
+        }else{
+            return response()->json(['status'=>false, 'message'=>'Invalid email address']);
+        }
+       } catch (\Throwable $th) {
+        return response()->json(['status'=>false, 'message'=> $th->getMessage()]);
+       }
     }
 }
