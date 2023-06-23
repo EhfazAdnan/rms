@@ -9,6 +9,7 @@ use App\Jobs\VerifyUserJobs;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 
 class AuthController extends Controller
 {
@@ -18,7 +19,7 @@ class AuthController extends Controller
      * @return void
      */
     public function __construct() {
-        $this->middleware('auth:api', ['except' => ['login', 'register']]);
+        $this->middleware('auth:api', ['except' => ['login', 'register','accountVerify']]);
     }
     /**
      * Get a JWT via given credentials.
@@ -58,7 +59,7 @@ class AuthController extends Controller
                 ));
 
         if($user){
-            $details = ['name' => $user->name, 'email' => $user->email, 'token' => $user->token];
+            $details = ['name' => $user->name, 'email' => $user->email, 'hash_Email' => Crypt::encryptString($user->email), 'token' => $user->token];
             dispatch(new VerifyUserJobs($details));
         }
 
@@ -66,6 +67,19 @@ class AuthController extends Controller
             'message' => 'User successfully registered',
             'user' => $user
         ], 201);
+    }
+
+    // account mail verify function
+    public function accountVerify($token,$email) {
+        $user = User::where([['email',Crypt::decryptString($email)],['token',$token]])->first();
+        if($user->token == $token){
+            $user->update([
+                'verify'=>true,
+                'token'=>null
+            ]);
+            return redirect()->to('http://127.0.0.1:8000/verify/success');
+        }
+        return redirect()->to('http://127.0.0.1:8000/verify/invalid_token');
     }
 
     /**
