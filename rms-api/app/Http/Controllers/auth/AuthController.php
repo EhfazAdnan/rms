@@ -11,6 +11,7 @@ use App\Jobs\PasswordResetJob;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Crypt;
 
 class AuthController extends Controller
@@ -21,7 +22,7 @@ class AuthController extends Controller
      * @return void
      */
     public function __construct() {
-        $this->middleware('auth:api', ['except' => ['login', 'register','accountVerify','forgotPassword']]);
+        $this->middleware('auth:api', ['except' => ['login', 'register','accountVerify','forgotPassword','updatePassword']]);
     }
     /**
      * Get a JWT via given credentials.
@@ -146,5 +147,30 @@ class AuthController extends Controller
        } catch (\Throwable $th) {
         return response()->json(['status'=>false, 'message'=> $th->getMessage()]);
        }
+    }
+
+    public function updatePassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required',
+            'password' => 'required|string|min:6',
+            'token'=>'required'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+        $email = Crypt::decryptString($request->email);
+        $user = DB::table('password_resets')->where([['email',$email],['token',$request->token]])->first();
+        if(!$user){
+            return response()->json(['status'=>false,'message' => 'Invalid email address or token']);
+        }else{
+            $data = User::where('email',$email)->first();
+            $data->update([
+                'password'=> Hash::make($request->password)
+            ]);
+            DB::table('password_resets')->where('email',$email)->delete();
+            return response()->json(['status'=>true,'message' => 'Password updated !']);
+        }
     }
 }
